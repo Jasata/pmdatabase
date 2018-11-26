@@ -1,6 +1,8 @@
 # pmdatabase
 Scripts to create PATE Monitor's SQLite datafile. These are used only during installation or development time re-initialization.
 
+*This script is cloned and executed by master installation script - aside from development use, this script has no other use than one-time database creation.*
+
 Intended directory is `/srv/pmdatabase`. *Remember that the `/srv` directory itself has to be writable for accounts using the database file.*
 
     =============================================================================
