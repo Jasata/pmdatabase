@@ -20,7 +20,7 @@ import logging
 import argparse
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--force',
-        help    = 'Delete existing database file and recreat.',
+        help    = 'Delete existing database file and recreate.',
         action  = 'store_true'
     )
     parser.add_argument(
