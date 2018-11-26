@@ -18,6 +18,7 @@ import sqlite3
 import pathlib
 import logging
 import argparse
+import subprocess
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
 __version__ = "0.3.1"
@@ -35,14 +36,25 @@ class Config:
     logging_level   = "DEBUG"
 
 
+def do_or_die(cmd: list):
+    prc = subprocess.run(cmd.split(" "))
+    if prc.returncode:
+        print("Command '{}' failed!".format(cmd))
+        os._exit(-1)
+
+
 
 if __name__ == '__main__':
 
     #
     # MUST be executed as 'patemon'!!
     # getpass.getuser() seems to get effective user - good!
-    if getpass.getuser() != "patemon":
-        print("This script MUST be executed as 'patemon' user!")
+    # if getpass.getuser() != "patemon":
+    #     print("This script MUST be executed as 'patemon' user!")
+    #     os._exit(-1)
+    # CHANGED MY MIND - ROOT REQUIRED NOW :-)
+    if os.geteuid() != 0:
+        print("This script MUST be executed as 'root'!")
         os._exit(-1)
 
 
@@ -410,6 +422,19 @@ if __name__ == '__main__':
         print("Database creation successful!")
     finally:
         connection.commit()
+
+
+
+
+    #
+    # Post-create steps - ownerships and permissions
+    #
+    dbdir = os.path.dirname(Config.dbfile)
+    do_or_die("chown patemon.patemon " + dbdir)
+    do_or_die("chmod 775 " + dbdir)
+    do_or_die("chown patemon.www-data " + Config.dbfile)
+    do_or_die("chmod 775 " + Config.dbfile)
+
 
     #
     # Leave, if development content is not requested
