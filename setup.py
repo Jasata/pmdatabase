@@ -11,6 +11,7 @@
 #   0.2.1   2018.11.11  hitcount.rotation -> hitcount.timestamp
 #   0.2.2   2018.11.11  housekeeping.timestamp datetime -> integer.
 #   0.3.0   2018.11.26  Modified and renamed as 'setup.py'.
+#   0.3.1   2018.11.27  Slight output/print changes.
 #
 import os
 import getpass
@@ -106,6 +107,11 @@ if __name__ == '__main__':
     #
     # Check for pre-existing database file
     #
+    print(
+        "Checking existing database file '{}'...".format(Config.dbfile),
+        end="",
+        flush=True
+    )
     if os.path.exists(Config.dbfile):
         if args.force:
             try:
@@ -114,28 +120,32 @@ if __name__ == '__main__':
                 print("Previous database file exists and could not be removed!")
                 os._exit(-1)
         else:
-            print("Database file already exists!")
+            print("Database file already exists! (use '--force' to remove)")
             os._exit(-1)
-
+    print("OK!")
 
     #
     # Create the file explicitly to test that the directory is writable
     #
+    print("Creating new database file...", end="", flush=True)
     try:
         pathlib.Path(Config.dbfile).touch(mode=0o770, exist_ok=False)
     except FileExistsError as e:
         print("Old database file was not successfully removed!")
         os._exit(-1)
+    print("OK!")
 
 
     #
     # Start actual database creation
     #
+    print("Connecting...", end="", flush=True)
     connection = sqlite3.connect(Config.dbfile)
     connection.execute('PRAGMA journal_mode=wal')
     connection.execute("PRAGMA foreign_keys = 1")
+    print("OK!")
 
-    print("Creating new tables")
+    print("Creating new tables...")
     try:
         #
         #   pate
@@ -429,11 +439,13 @@ if __name__ == '__main__':
     #
     # Post-create steps - ownerships and permissions
     #
+    print("Setting ownerships and permissions...", end="", flush=True)
     dbdir = os.path.dirname(Config.dbfile)
     do_or_die("chown patemon.patemon " + dbdir)
     do_or_die("chmod 775 " + dbdir)
     do_or_die("chown patemon.www-data " + Config.dbfile)
     do_or_die("chmod 775 " + Config.dbfile)
+    print("OK!")
 
 
     #
@@ -441,6 +453,7 @@ if __name__ == '__main__':
     #
     if not args.dev:
         connection.close()
+        print("Module 'pmdatabase' setup completed!\n")
         os._exit(0)
     else:
         print("Creating development and testing content...")
@@ -742,6 +755,7 @@ if __name__ == '__main__':
 
     connection.commit()
     connection.close()
+    print("Module 'pmdatabase' setup completed!\n")
 
 
 # EOF
