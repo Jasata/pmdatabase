@@ -18,3 +18,12 @@ Intended directory is `/srv/pmdatabase`. *Remember that the `/srv` directory its
  
  
  NOTE: So much is still to be specified for PATE. This script will need tons of changes in the weeks to come.
+
+## Write-Ahead Logging Mode
+In WAL mode, SQLite3 creates writelogs into separate files. These will always be created under the ownership of the CRUD DML issuer. What permission mask is used, is unclear at this time.
+
+For multi-user solution, this imposes a difficult issue where the main strengths of WAL mode are lost into journal file accessability issues. This is most acute in the planned architecture which was hoping to avoid occasional "long commits" (automatic checkpointing) by adopting the SQLite3 documentation proposed model of creating a maintenance daemon which keeps logs small and makes the checkpoint writes without performance impact issues.
+
+Imagine `psud` writing updates to `psud` table twice a second, but leaving behind the write-ahead log files, diabling Flask based Web UI from writing `command` rows until the maintentnace daemon has written the logs into the main database file. *SQLite3 WAL mode allows it, but the filesystem will not.*
+
+**The solution** might be found in a way to tell the maintenance process to leave the log files and not to remove them. This could allow us to set their ownership and permissions to support access by multiple users. **This needs to be studied!**
