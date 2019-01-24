@@ -12,6 +12,7 @@
 #   0.2.2   2018.11.11  housekeeping.timestamp datetime -> integer.
 #   0.3.0   2018.11.26  Modified and renamed as 'setup.py'.
 #   0.3.1   2018.11.27  Slight output/print changes.
+#   0.4.0   2019.01.24  Column psu.state removed.
 #
 import os
 import getpass
@@ -380,11 +381,9 @@ if __name__ == '__main__':
             current_limit       REAL            NOT NULL,
             measured_current    REAL            NOT NULL,
             measured_voltage    REAL            NOT NULL,
-            state               TEXT            NOT NULL,
             modified            INTEGER         NOT NULL DEFAULT CURRENT_TIMESTAMP,
             CONSTRAINT          single_row_chk  CHECK (id = 0),
-            CONSTRAINT          power_chk       CHECK (power IN ('ON', 'OFF')),
-            CONSTRAINT          state_chk       CHECK (state IN ('OK', 'OVER CURRENT'))
+            CONSTRAINT          power_chk       CHECK (power IN ('ON', 'OFF'))
         )
         """
         connection.execute(sql)
