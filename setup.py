@@ -35,6 +35,8 @@ Version {}, 2018 {}
 
 class Config:
     dbfile          = "/srv/patemon.sqlite3"
+    dbfile_owner    = "patemon.patemon"
+    dbdir_owner     = "patemon.www-data"
     logging_level   = "DEBUG"
 
 
@@ -44,6 +46,19 @@ def do_or_die(cmd: list):
         print("Command '{}' failed!".format(cmd))
         os._exit(-1)
 
+def check_user_and_group(usr_grp : str):
+    """Will fail unless the provided value has a dot separator"""
+    import pwd
+    import grp
+    (user, group) = usr_grp.split(".")
+    try:
+        pwd.getpwnam(user)
+    except KeyError as e:
+        raise ValueError("User '{}' does not exist!".format(user)) from e
+    try:
+        grp.getgrnam(group)
+    except KeyError:
+        raise ValueError("Group '{}' does not exist!".format(group)) from e
 
 
 if __name__ == '__main__':
@@ -436,13 +451,19 @@ if __name__ == '__main__':
 
 
     #
+    # Check that specified 'user.group' 
+    #
+    check_user_and_group(Config.dbdir_owner)
+    check_user_and_group(Config.dbfile_owner)
+
+    #
     # Post-create steps - ownerships and permissions
     #
     print("Setting ownerships and permissions...", end="", flush=True)
     dbdir = os.path.dirname(Config.dbfile)
-    do_or_die("chown patemon.patemon " + dbdir)
+    do_or_die("chown {} {}".format(Config.dbfile_owner, dbdir))
     do_or_die("chmod 775 " + dbdir)
-    do_or_die("chown patemon.www-data " + Config.dbfile)
+    do_or_die("chown {} {}".format(Config.dbdir_owner, Config.dbfile))
     do_or_die("chmod 775 " + Config.dbfile)
     print("OK!")
 
