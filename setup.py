@@ -23,14 +23,14 @@ import argparse
 import subprocess
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
 =============================================================================
 University of Turku, Department of Future Technologies
 ForeSail-1 / PATE Monitor database creation script
-Version {}, 2018 {}
+Version {}, 2019 {}
 """.format(__version__, __author__)
 
 class Config:
