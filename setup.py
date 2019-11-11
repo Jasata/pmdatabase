@@ -13,6 +13,9 @@
 #   0.3.0   2018.11.26  Modified and renamed as 'setup.py'.
 #   0.3.1   2018.11.27  Slight output/print changes.
 #   0.4.0   2019.01.24  Column psu.state removed.
+#   0.4.1   2019.11.11  Read /boot/install.config for DEV/UAT/PRD.
+#
+#   TODO: 'setup.log' gets no content currently (just unimplemented...)
 #
 import os
 import getpass
@@ -21,9 +24,11 @@ import pathlib
 import logging
 import argparse
 import subprocess
+import configparser
+
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.3.2"
+__version__ = "0.4.1"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -33,11 +38,33 @@ ForeSail-1 / PATE Monitor database creation script
 Version {}, 2019 {}
 """.format(__version__, __author__)
 
+
+#
+# Global configuration
+#
 class Config:
-    dbfile          = "/srv/patemon.sqlite3"
-    dbfile_owner    = "patemon.patemon"
-    dbdir_owner     = "patemon.www-data"
-    logging_level   = "DEBUG"
+    log_level       = "DEBUG"
+    log_file        = "setup.log"
+    config_file     = "/boot/install.config"
+    version         = __version__
+    class Mode:
+        default     = "PRD"
+        options     = ["DEV", "UAT", "PRD"]
+        selected    = None      # Set in argparse step
+    class Script:
+        name        = os.path.basename(__file__)
+        path        = os.path.dirname(os.path.realpath(__file__))
+    class DB:
+        file_name   = "/srv/patemon.sqlite3"
+        file_owner  = "patemon.patemon"
+        dir_owner   = "patemon.www-data"
+    force           = False
+    # to-be obsoleted
+#    dbfile          = "/srv/patemon.sqlite3"
+#    dbfile_owner    = "patemon.patemon"
+#    dbdir_owner     = "patemon.www-data"
+
+
 
 
 def do_or_die(cmd: list):
@@ -45,6 +72,7 @@ def do_or_die(cmd: list):
     if prc.returncode:
         print("Command '{}' failed!".format(cmd))
         os._exit(-1)
+
 
 def check_user_and_group(usr_grp : str):
     """Will fail unless the provided value has a dot separator"""
@@ -61,18 +89,70 @@ def check_user_and_group(usr_grp : str):
         raise ValueError("Group '{}' does not exist!".format(group)) from e
 
 
+def file_exists(file: str) -> bool:
+    """Accepts path/file or file and tests if it exists (as a file)."""
+    if os.path.exists(file):
+        if os.path.isfile(file):
+            return True
+    return False
+
+
+def read_config(cfgfile: str):
+    """Read instance-common config for relevant values. Updates Config datastructure directly."""
+    cfg = configparser.ConfigParser()
+    if file_exists(cfgfile):
+        try:
+            cfg.read(cfgfile)
+        except Exception as e:
+            print(e)
+            os._exit(-1)
+    else:
+        print(
+            "Notification: Configuration file '{}' does not exist.".format(
+                cfgfile
+            )
+        )
+        return
+    #
+    # Section "Config"
+    #
+    try:
+        section = cfg["Config"]
+        val = section.get("mode", Config.Mode.default)
+        if val in Config.Mode.options:
+            Config.Mode.default = val
+        else:
+            print(
+                "{}: WARNING: Invalid MODE value! Ignoring...".format(
+                    os.path.basename(cfgfile)
+                )
+            )
+    except Exception as e:
+        print(e)
+        os._exit(-1)
+
+
+
+##############################################################################
+#
+# MAIN
+#
+##############################################################################
+
 if __name__ == '__main__':
 
     #
-    # MUST be executed as 'patemon'!!
-    # getpass.getuser() seems to get effective user - good!
-    # if getpass.getuser() != "patemon":
-    #     print("This script MUST be executed as 'patemon' user!")
-    #     os._exit(-1)
-    # CHANGED MY MIND - ROOT REQUIRED NOW :-)
+    # MUST be executed as 'root'
+    #
     if os.geteuid() != 0:
         print("This script MUST be executed as 'root'!")
         os._exit(-1)
+
+
+    #
+    # Read .config -file
+    #
+    read_config(Config.config_file)
 
 
     #
@@ -85,12 +165,10 @@ if __name__ == '__main__':
     parser.add_argument(
         '-l',
         '--log',
-        help    = "Set logging level. Default: '{}'".format(Config.logging_level),
+        help    = "Set logging level. Default: '{}'".format(Config.log_level),
         choices = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-        nargs   = '?',
-        dest    = "logging_level",
-        const   = "INFO",
-        default = Config.logging_level,
+        dest    = "log_level",
+        default = Config.log_level,
         type    = str.upper,
         metavar = "LEVEL"
     )
@@ -100,20 +178,30 @@ if __name__ == '__main__':
         action  = 'store_true'
     )
     parser.add_argument(
-        '--dev',
-        help    = 'Generate development content.',
-        action  = 'store_true'
+        '-m',
+        '--mode',
+        help    = "Instance mode ({}). Default: '{}'".format(
+            "|".join(Config.Mode.options),
+            Config.Mode.default
+        ),
+        choices = Config.Mode.options,
+        dest    = "mode",
+        default = Config.Mode.default,
+        type    = str.upper,
+        metavar = "MODE"
     )
     args = parser.parse_args()
-    Config.logging_level = getattr(logging, args.logging_level)
+    Config.log_level = getattr(logging, args.log_level)
+    Config.Mode.selected = args.mode
+    Config.force = args.force
 
 
     #
     # Set up logging
     #
     logging.basicConfig(
-        level       = Config.logging_level,
-        filename    = "setup.log",
+        level       = Config.log_level,
+        filename    = Config.log_file,
         format      = "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
         datefmt     = "%H:%M:%S"
     )
@@ -124,14 +212,16 @@ if __name__ == '__main__':
     # Check for pre-existing database file
     #
     print(
-        "Checking existing database file '{}'...".format(Config.dbfile),
+        "Checking existing database file '{}'...".format(
+            Config.DB.file_name
+        ),
         end="",
         flush=True
     )
-    if os.path.exists(Config.dbfile):
-        if args.force:
+    if os.path.exists(Config.DB.file_name):
+        if Config.force:
             try:
-                os.remove(Config.dbfile)
+                os.remove(Config.DB.file_name)
             except:
                 print("Previous database file exists and could not be removed!")
                 os._exit(-1)
@@ -145,7 +235,7 @@ if __name__ == '__main__':
     #
     print("Creating new database file...", end="", flush=True)
     try:
-        pathlib.Path(Config.dbfile).touch(mode=0o770, exist_ok=False)
+        pathlib.Path(Config.DB.file_name).touch(mode=0o770, exist_ok=False)
     except FileExistsError as e:
         print("Old database file was not successfully removed!")
         os._exit(-1)
@@ -156,7 +246,7 @@ if __name__ == '__main__':
     # Start actual database creation
     #
     print("Connecting...", end="", flush=True)
-    connection = sqlite3.connect(Config.dbfile)
+    connection = sqlite3.connect(Config.DB.file_name)
     connection.execute('PRAGMA journal_mode=wal')
     connection.execute("PRAGMA foreign_keys = 1")
     print("OK!")
@@ -258,20 +348,43 @@ if __name__ == '__main__':
         # Sector specific counters
         for sector in range(0,37):
             for proton in range(1,13):
-                cols.append("s{:02}p{:02} INTEGER NOT NULL, ".format(sector, proton))
+                cols.append("s{:02}p{:02} INTEGER NOT NULL, ".format(
+                        sector,
+                        proton
+                    )
+                )
             for electron in range(1,9):
-                cols.append("s{:02}e{:02} INTEGER NOT NULL, ".format(sector, electron))
+                cols.append("s{:02}e{:02} INTEGER NOT NULL, ".format(
+                        sector,
+                        electron
+                    )
+                )
         # Telescope specfic counters
         for telescope in ('st', 'rt'):
             for ac in range(1, 3):
-                cols.append("{}ac{} INTEGER NOT NULL, ".format(telescope, ac))
+                cols.append("{}ac{} INTEGER NOT NULL, ".format(
+                        telescope,
+                        ac
+                    )
+                )
             # D1 hit patterns
             for d1 in range(1,5):
-                cols.append("{}d1p{:01} INTEGER NOT NULL, ".format(telescope, d1))
+                cols.append("{}d1p{:01} INTEGER NOT NULL, ".format(
+                        telescope,
+                        d1
+                    )
+                )
             # D2 hit pattern
-            cols.append("{}d2p1 INTEGER NOT NULL, ".format(telescope))
+            cols.append("{}d2p1 INTEGER NOT NULL, ".format(
+                    telescope
+                )
+            )
             for trash in range(1,3):
-                cols.append("{}trash{:01} INTEGER NOT NULL, ".format(telescope, trash))
+                cols.append("{}trash{:01} INTEGER NOT NULL, ".format(
+                        telescope,
+                        trash
+                    )
+                )
         sql += "".join(cols)
         sql += " FOREIGN KEY (session_id) REFERENCES testing_session (id) )"
         connection.execute(sql)
@@ -451,27 +564,27 @@ if __name__ == '__main__':
 
 
     #
-    # Check that specified 'user.group' 
+    # Check that specified 'user.group' exists
     #
-    check_user_and_group(Config.dbdir_owner)
-    check_user_and_group(Config.dbfile_owner)
+    check_user_and_group(Config.DB.dir_owner)
+    check_user_and_group(Config.DB.file_owner)
 
     #
     # Post-create steps - ownerships and permissions
     #
     print("Setting ownerships and permissions...", end="", flush=True)
-    dbdir = os.path.dirname(Config.dbfile)
-    do_or_die("chown {} {}".format(Config.dbfile_owner, dbdir))
+    dbdir = os.path.dirname(Config.DB.file_name)
+    do_or_die("chown {} {}".format(Config.DB.file_owner, dbdir))
     do_or_die("chmod 775 " + dbdir)
-    do_or_die("chown {} {}".format(Config.dbdir_owner, Config.dbfile))
-    do_or_die("chmod 775 " + Config.dbfile)
+    do_or_die("chown {} {}".format(Config.DB.dir_owner, Config.DB.file_name))
+    do_or_die("chmod 775 " + Config.DB.file_name)
     print("OK!")
 
 
     #
     # Leave, if development content is not requested
     #
-    if not args.dev:
+    if Config.Mode.selected != "DEV":
         connection.close()
         print("Module 'pmdatabase' setup completed!\n")
         os._exit(0)
@@ -626,13 +739,24 @@ if __name__ == '__main__':
     # SQL
     sql = generate_hitcount_insert_sql(cursor)
     # Generate sci data rotations
-    print("Creating {} rotations of hitcount data...".format(HITCOUNT_ROTATIONS))
+    print("Creating {} rotations of hitcount data...".format(
+            HITCOUNT_ROTATIONS
+        )
+    )
     try:
         for i in range(0, HITCOUNT_ROTATIONS):
-            print("\r{:>6.2f} % ...".format((100*i)/HITCOUNT_ROTATIONS), end='')
+            print("\r{:>6.2f} % ...".format(
+                    (100*i)/HITCOUNT_ROTATIONS
+                ),
+                end=''
+            )
             cursor.execute(
                 sql,
-                generate_hitcount_packet(session_id, cursor, HITCOUNT_INTERVAL)
+                generate_hitcount_packet(
+                    session_id,
+                    cursor,
+                    HITCOUNT_INTERVAL
+                )
             )
     except:
         print("hitcount table content generation failed!")
